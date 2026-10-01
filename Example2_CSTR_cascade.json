@@ -1,0 +1,30 @@
+{
+  "rhs": "Example2_CSTR_cascade",
+  "stateNames": [ "x1", "x2", "x3", "x4" ],
+  "paramNames": [ "alpha" ],
+  "activePreset": "middle_unstable_start",
+  "X0presets": {
+    "middle_unstable_start": {
+      "x1": 0,
+      "x2": 0,
+      "x3": 0,
+      "x4": 0,
+      "alpha": 0
+    }
+  },
+  "continuationSettings": {
+    "MaxContIter": 600,
+    "MinAlpha": -1e-5,
+    "MaxAlpha": 0.0595,
+    "InitialIntegrationStepSize": 0.2,
+    "MinIntegrationStepSize": 0.1,
+    "MaxIntegrationStepSize": 0.5,
+    "runStabilityAnalysis": true,
+    "continuationDirection": "forward",
+    "stepIncreaseFactor": 1.2,
+    "stepDecreaseFactor": 0.5,
+    "maxNewtonIters": 3,
+    "livePlotXVar": "alpha",
+    "livePlotYVar": "x4"
+  }
+}

@@ -1,0 +1,73 @@
+{
+  "rhs": "Example3_CSTR_3Reactions",
+  "stateNames": [ "cA", "cB", "cC", "T", "Tc", "cD", "cE" ],
+  "paramNames": [ "alpha" ],
+  "activePreset": "feed_temperature",
+  "X0presets": {
+    "water_excess": {
+      "cA": 13441.50352814143,
+      "cB": 2613.44766695847,
+      "cC": 160.85150189895,
+      "T": 296.05145247806,
+      "Tc": 292.05176423742,
+      "cD": 160.85150189895,
+      "cE": 160.85150189895,
+      "alpha": 30
+    },
+    "propylene_oxide_excess": {
+      "cA": 30.01421689,
+      "cB": 3371.18432591,
+      "cC": 10354.15017647,
+      "T": 440.92668715,
+      "Tc": 373.46328493,
+      "cD": 423.41616874,
+      "cE": 0.18050545,
+      "alpha": 15.04700921
+    },
+    "coolant_flow": {
+      "cA": 12382.73502856,
+      "cB": 6067.82797755,
+      "cC": 306.10232187,
+      "T": 293.81453462,
+      "Tc": 290.17349535,
+      "cD": 0.07060185,
+      "cE": 0.00000005,
+      "alpha": 238.40622904
+    },
+    "coolant_temperature": {
+      "cA": 858.13026281,
+      "cB": 19.71428771,
+      "cC": 1121.28999836,
+      "T": 466.76717354,
+      "Tc": 393.23876786,
+      "cD": 4712.36585767,
+      "cE": 246.10715122,
+      "alpha": 27.29357707
+    },
+    "feed_temperature": {
+      "cA": 12896.9365663,
+      "cB": 6454.79791463,
+      "cC": 47.55251418,
+      "T": 276.05510668,
+      "Tc": 281.40766663,
+      "cD": 0.00131307,
+      "cE": 0.0,
+      "alpha": -28.59099269
+    }
+  },
+  "continuationSettings": {
+    "MaxContIter": 1200,
+    "MinAlpha": -50,
+    "MaxAlpha": 80,
+    "InitialIntegrationStepSize": 0.1,
+    "MinIntegrationStepSize": 0.02,
+    "MaxIntegrationStepSize": 150,
+    "runStabilityAnalysis": true,
+    "continuationDirection": "backward",
+    "stepIncreaseFactor": 1.3,
+    "stepDecreaseFactor": 0.5,
+    "maxNewtonIters": 3,
+    "livePlotXVar": "alpha",
+    "livePlotYVar": "T"
+  }
+}
