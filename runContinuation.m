@@ -8,8 +8,8 @@ function runContinuation(info, settingsOverride)
 %   RUNCONTINUATION(info) runs continuation for the problem described by info.
 %   Before the run starts, an editable, tabbed dialog shows:
 %     - "Initial Guess" - state variables + parameters, pre-filled from
-%       info.X0presets.(info.activePreset) when info provides one, left
-%       blank for manual entry when it doesn't
+%       info.X0 when info provides one, left blank for manual entry when
+%       it doesn't
 %     - "Continuation Settings" - which direction(s) to continue in,
 %       termination criteria, step size control, Newton step adaptation
 %       factors, which two variables to show in the live plot, and
@@ -30,10 +30,9 @@ function runContinuation(info, settingsOverride)
 %     rhs        - handle to the right-hand-side function, F = rhs(X)
 %     stateNames - cell array of state variable names
 %     paramNames - cell array of continuation parameter names
-%     X0presets  - struct of named starting points, one flat struct per
-%                  preset with a field per state/parameter name
-%     activePreset - name of the X0presets field to start from
 %   info may also have the fields:
+%     X0         - starting point, flat struct with a field per
+%                  state/parameter name (pre-fills the dialog)
 %     continuationSettings - struct overriding any subset of the
 %                  built-in default run settings below
 %     jsonPath   - path of the JSON file info was loaded from (set
@@ -121,8 +120,8 @@ ProblemFCN = info.rhs;
 
 %% ---- initial guess X0 + continuation settings dialog ----
 % One tabbed dialog, shown before every run:
-%   "Initial Guess"         - pre-filled from info.X0presets.(info.activePreset)
-%                              when info provides one, blank otherwise
+%   "Initial Guess"         - pre-filled from info.X0 when info provides
+%                              one, blank otherwise
 %   "Continuation Settings" - pre-filled from the settings struct built above
 % Both tabs are editable. runContinuation() itself still has no
 % problem-specific data of its own - it only displays and lets you
@@ -433,12 +432,9 @@ ResJac = ResJac(1:Nop,:,:);
 function [X, settings] = getRunConfig(info, settings)
 %GETRUNCONFIG Tabbed, editable dialog shown before every run.
 %   Tab "Initial Guess"         - one numeric field per entry of
-%                                  [info.stateNames, info.paramNames].
-%                                  If info.X0presets is available, a
-%                                  dropdown lets you pick which preset
-%                                  pre-fills the fields (default
-%                                  info.activePreset); the fields start
-%                                  blank if info has no X0presets.
+%                                  [info.stateNames, info.paramNames],
+%                                  pre-filled from info.X0 (blank if
+%                                  info has no X0).
 %   Tab "Continuation Settings"  - which direction(s) to continue in
 %                                  (dropdown: forward / backward / both),
 %                                  termination criteria, step size
@@ -451,8 +447,7 @@ function [X, settings] = getRunConfig(info, settings)
 %                                  struct passed in.
 %   Both tabs are editable before the run starts. "Run" uses the current
 %   field values for this run only. "Save to JSON" additionally writes
-%   them back to info.jsonPath (the selected preset and
-%   continuationSettings), so they are still there next time - it does
+%   them back to info.jsonPath (X0 and continuationSettings), so they are still there next time - it does
 %   nothing to the run itself and the dialog stays open.
 %
 %   Returns the flat vector X (in the order given by
@@ -462,20 +457,10 @@ function [X, settings] = getRunConfig(info, settings)
 varNames = [info.stateNames, info.paramNames];
 nVar = numel(varNames);
 
-hasPresets = isfield(info,'X0presets') && ~isempty(fieldnames(info.X0presets));
-if hasPresets
-    presetNames = fieldnames(info.X0presets);
-    activeIdx = find(strcmp(presetNames, info.activePreset), 1);
-    if isempty(activeIdx)
-        activeIdx = 1;
-    end
-else
-    presetNames = {};
-    activeIdx = 1;
-end
+hasX0 = isfield(info,'X0') && isstruct(info.X0);
 
 rowH = 26;
-guessRows    = nVar + hasPresets;
+guessRows    = nVar;
 settingsRows = 22;  % 5 section headers + 9 edit fields + 1 (tall) checkbox + 3 dropdowns, with margin
 tabH = max(guessRows, settingsRows)*rowH + 20;
 figW = 380;
@@ -493,23 +478,12 @@ tabSettings = uitab('Parent',tg,'Title','Continuation Settings');
 % ============= Tab: Initial Guess =============
 y = tabH - 30;
 
-if hasPresets
-    uicontrol(tabGuess,'Style','text','String','Preset:', ...
-        'Units','pixels','Position',[10 y 80 20],'HorizontalAlignment','left');
-    popupPreset = uicontrol(tabGuess,'Style','popupmenu','String',presetNames, ...
-        'Units','pixels','Position',[95 y+2 200 24],'Value',activeIdx, ...
-        'Callback',@fillFromPreset);
-    y = y - rowH;
-else
-    popupPreset = [];
-end
-
 editHandles = gobjects(nVar,1);
 for i = 1:nVar
     uicontrol(tabGuess,'Style','text','String',varNames{i}, ...
         'Units','pixels','Position',[10 y 80 20],'HorizontalAlignment','left');
-    if hasPresets
-        valStr = num2str(info.X0presets.(presetNames{activeIdx}).(varNames{i}), '%.10g');
+    if hasX0 && isfield(info.X0, varNames{i})
+        valStr = num2str(info.X0.(varNames{i}), '%.10g');
     else
         valStr = '';
     end
@@ -650,9 +624,6 @@ uicontrol(fig,'Style','pushbutton','String','Cancel','Units','pixels', ...
 data.varNames        = varNames;
 data.editHandles     = editHandles;
 data.info            = info;
-data.hasPresets      = hasPresets;
-data.presetNames     = presetNames;
-data.popupPreset     = popupPreset;
 data.directionOptions   = directionOptions;
 data.popupDirection     = popupDirection;
 data.editMaxContIter = editMaxContIter;
@@ -677,16 +648,6 @@ data = guidata(fig);
 X        = data.resultX;
 settings = data.resultSettings;
 delete(fig);
-
-
-function fillFromPreset(src,~)
-figHandle = ancestor(src,'figure');
-data = guidata(figHandle);
-selName = data.presetNames{get(data.popupPreset,'Value')};
-preset = data.info.X0presets.(selName);
-for i = 1:numel(data.varNames)
-    set(data.editHandles(i),'String', num2str(preset.(data.varNames{i}), '%.10g'));
-end
 
 
 function [vals, result, ok] = readFormValues(data)
@@ -755,7 +716,8 @@ uiresume(figHandle);
 
 function saveToJson(src,~)
 %SAVETOJSON Write the current field values back to info.jsonPath -
-%the selected (or newly named) preset, plus continuationSettings.
+%X0 (the starting point) and continuationSettings. An old-format file
+%(X0presets/activePreset) is converted to the new format on save.
 %Leaves the dialog open; does not affect Run/Cancel.
 
 figHandle = ancestor(src,'figure');
@@ -771,31 +733,26 @@ if ~ok
     return
 end
 
-if data.hasPresets
-    presetName = data.presetNames{get(data.popupPreset,'Value')};
-else
-    answer = inputdlg('New preset name:', 'Save Initial Guess', [1 50]);
-    if isempty(answer) || isempty(strtrim(answer{1}))
-        return
-    end
-    presetName = matlab.lang.makeValidName(strtrim(answer{1}));
-end
-
-presetStruct = struct();
+X0struct = struct();
 for i = 1:numel(data.varNames)
-    presetStruct.(data.varNames{i}) = vals(i);
+    X0struct.(data.varNames{i}) = vals(i);
 end
 
 raw = jsondecode(fileread(data.info.jsonPath));
-raw.X0presets.(presetName) = presetStruct;
-raw.activePreset = presetName;
+raw.X0 = X0struct;
+if isfield(raw,'X0presets')
+    raw = rmfield(raw,'X0presets');
+end
+if isfield(raw,'activePreset')
+    raw = rmfield(raw,'activePreset');
+end
 raw.continuationSettings = result;
 
 fid = fopen(data.info.jsonPath,'w');
 fwrite(fid, jsonencode(raw,'PrettyPrint',true));
 fclose(fid);
 
-msgbox(sprintf('Saved to %s\n(preset "%s").', data.info.jsonPath, presetName), 'Saved');
+msgbox(sprintf('Saved to %s\n(X0 and continuation settings).', data.info.jsonPath), 'Saved');
 
 
 function cancelRun(figHandle)

@@ -12,9 +12,16 @@ function F = Example3_CSTR_3Reactions(X)
 %     5: Tc   - coolant temperature                      [K]
 %     6: cD   - concentration of D (dipropylene glycol) [mol/m3]
 %     7: cE   - concentration of E (tripropylene glycol)[mol/m3]
+%       
+%     A + B -> C  
+%     A + C -> D     
+%     A + D -> E
 %
-%   alpha - continuation parameter, shifts the feed temperature
-%           Tf = 273.15 + alpha  [K]
+%   alpha - continuation parameter = FAf, the propylene oxide feed flow
+%           rate [mol/s] (see FAf = alpha in reactorEquations below).
+%           To continue in another parameter (e.g. FBf or Tf), change
+%           that assignment and use a separate JSON file with its own X0
+%           and continuationSettings.
 %
 %   Output F = [dcA/dt dcB/dt dcC/dt dT/dt dTc/dt dcD/dt dcE/dt]  (in this order)
 %
@@ -77,47 +84,42 @@ VR=1; %m3
 N_coolant=391; %coolant medium holdup, mol
 n_coolant=105; %mol/s
 
-Tc_feed=288.15; % K 288.15 K
+Tc_feed=15+273.15; % K 
 
-% Heat transfer U*A. In the original file the physically meaningful
-% values were immediately overwritten by test values (practically
-% infinite heat transfer, T approx. equal to Tc). Both variants are kept
-% here and switched via useTestHeatTransfer - confirm which regime you
-% actually want to use.
-useTestHeatTransfer = false;
-if useTestHeatTransfer
-    U = 1;       % (J s^-1 m^-2 K^-1) - test value
-    A = 10000;   % m2                 - test value
-else
-    U = 1.65e3;  % (J s^-1 m^-2 K^-1) - physical value
-    A = 6.7;     % m2                 - physical value
-end
+
+%U*A = 10 kWK-1
+U = 1;       % (J s^-1 m^-2 K^-1) - test value
+A = 10000;   % m2                 - test value
 
 %feed
 n_methanol=0;             %mol/s
 cF=0;
 
-FAf = 11.94444;
-FBf = 6.0;
+FAf = 11.94; %mol/s
+FAf = alpha;
+FBf = 6;  %mol/s 
+%FBf = alpha;  %mol/s 
 
 Ff=[FAf, FBf, 0, 0, 0, n_methanol]; %mol/s
-Tf = 273.15 + alpha; % Tf depends on the continuation parameter alpha
+%Tf = 273.15 + alpha; % Tf depends on the continuation parameter alpha
+Tf = 26+273.15; % Normal feed temperature
 
 %A: n_PO (propylene oxide) 43->11.94444
 %B: n_H2O (water) 21.6->6 kmol/h
 
 %% ---- kinetic parameters ----
-kvoo1=96000;      %m3/mol/s
+kvoo1=89545;      %m3/mol/s -85966 -89545,0000000000
 E1=75362.0;       %J/mol
 drHref1=-91360.0; %J/mol; ref. at 25 C
 
 kvoo2=9600;      %m3/mol/s
 E2=82899.0;       %J/mol
-drHref2=-111000.0; %J/mol; ref. at 25 C
+drHref2=-111005.7; %J/mol; ref. at 25 C
 
 kvoo3=960;      %m3/mol/s
 E3=91189;       %J/mol
-drHref3= -1.1e5; % -244600.0;  J/mol; ref. at 25 C
+drHref3= -108880.0;  %  J/mol; ref. at 25 C  
+
 
 %% ---- feed calculations ----
 m_mix=sum(Ff.*Mh);                                 % kg/s

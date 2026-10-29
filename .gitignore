@@ -1,0 +1,6 @@
+# continuation results and exported figures
+Res_*.mat
+*.fig
+
+# local backups
+*_OLDbackup.*

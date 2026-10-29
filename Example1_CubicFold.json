@@ -2,20 +2,9 @@
   "rhs": "Example1_CubicFold",
   "stateNames": [ "x" ],
   "paramNames": [ "alpha" ],
-  "activePreset": "middle_unstable_start",
-  "X0presets": {
-    "middle_unstable_start": {
-      "x": 0,
-      "alpha": 0
-    },
-    "lower_stable_branch": {
-      "x": -2,
-      "alpha": -6
-    },
-    "upper_stable_branch": {
-      "x": 2,
-      "alpha": 6
-    }
+  "X0": {
+    "x": 0,
+    "alpha": 0
   },
   "continuationSettings": {
     "MaxContIter": 300,

@@ -11,9 +11,16 @@ function info = loadProblemInfo(jsonPath)
 %                  F = rhs(X), with X = [states, parameters]
 %     stateNames - array of state variable names
 %     paramNames - array of continuation parameter names
-%     X0presets  - object of named starting points, one flat object per
-%                  preset with a field per state/parameter name
-%     activePreset - name of the X0presets field to start from
+%     X0         - the starting point, one flat object with a field per
+%                  state/parameter name
+%
+%   One JSON file = one continuation task (one parameter, one starting
+%   point, one set of continuationSettings). To continue in a different
+%   physical parameter, edit the rhs file and use a separate JSON file
+%   with its own X0 and settings.
+%
+%   Older JSON files with X0presets/activePreset are still accepted: the
+%   active preset (or the first one) is used as X0 and a warning is shown.
 %     continuationSettings - default run settings (termination criteria,
 %                  step size control, stability analysis on/off)
 %
@@ -39,3 +46,24 @@ info.jsonPath = jsonPath;
 % there are.
 info.stateNames = reshape(info.stateNames, 1, []);
 info.paramNames = reshape(info.paramNames, 1, []);
+
+% Backward compatibility: older files had several named starting points
+% (X0presets + activePreset) instead of a single X0.
+if ~isfield(info,'X0') && isfield(info,'X0presets') && ~isempty(fieldnames(info.X0presets))
+    presetNames = fieldnames(info.X0presets);
+    useName = presetNames{1};
+    if isfield(info,'activePreset') && any(strcmp(presetNames, info.activePreset))
+        useName = info.activePreset;
+    end
+    info.X0 = info.X0presets.(useName);
+    warning('loadProblemInfo:LegacyPresets', ...
+        ['%s uses the old X0presets/activePreset format - preset "%s" is used as X0. ', ...
+         'Press "Save to JSON" in the setup dialog to convert the file to the new format.'], ...
+        jsonPath, useName);
+end
+if isfield(info,'X0presets')
+    info = rmfield(info,'X0presets');
+end
+if isfield(info,'activePreset')
+    info = rmfield(info,'activePreset');
+end

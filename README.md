@@ -61,7 +61,7 @@ For a new problem you write only a model function and its JSON file; the core fi
 | `Example1_CubicFold.m` / `.json` | example | One-equation fold benchmark with known exact answer. |
 | `Example2_CSTR_cascade.m` / `.json` | example | Two CSTRs in series with recycle, from Kubíček, Jacák and Marek (1983). |
 | `Example3_CSTR_3Reactions.m` / `.json` | example | CSTR with three reactions and a cooling jacket, after Švandová et al. (2005). |
-| `runDynamicTest.m` | optional script | Stand-alone dynamic simulation (`ode15s`) of Example 3 for step changes of α; values are hard-coded. |
+| `runDynamicTest.m` | optional script | Stand-alone dynamic simulation (`ode15s`) of Example 3 for step changes of α = F_A; step values are set at the top of the file. |
 
 ## Running it
 
@@ -81,7 +81,7 @@ Requires MATLAB with the Optimization Toolbox (`fsolve`). The Dynamic Test uses 
 
 What happens after the call:
 
-1. **Setup dialog** with two tabs. *Initial Guess*: a preset dropdown and one field per variable. *Continuation Settings*: all settings from the table below. Buttons: **Run** uses the values for this run only; **Save to JSON** writes them back to the JSON file and keeps the dialog open; **Cancel** stops.
+1. **Setup dialog** with two tabs. *Initial Guess*: one field per variable, pre-filled from `X0`. *Continuation Settings*: all settings from the table below. Buttons: **Run** uses the values for this run only; **Save to JSON** writes them back to the JSON file and keeps the dialog open; **Cancel** stops.
 2. The first point is corrected by `fsolve` with α fixed, so the initial guess only has to be close to a steady state.
 3. The branch is traced forward, backward or both ways from that point (setting `continuationDirection`). With `both`, the two halves are joined into one ordered branch.
 4. **Live plot** of the branch during the run (axes set by livePlotXVar / livePlotYVar).
@@ -104,9 +104,10 @@ All inputs live in the problem JSON; every value can still be changed in the set
 | `rhs` | string | Name of the model function (its file name, without `.m`). |
 | `stateNames` | array of strings | State names, in the order used in X. Their count sets NoEQ. |
 | `paramNames` | array of 1 string | Name of the continuation parameter, e.g. `"alpha"`. |
-| `X0presets` | object | Named starting points; each is an object with one value per state and parameter name. |
-| `activePreset` | string | Preset pre-selected in the dialog. |
+| `X0` | object | Starting point: one value per state and parameter name. |
 | `continuationSettings` | object | Run settings, table below. Any field left out takes the built-in default. |
+
+One JSON file describes one continuation task: one parameter, one starting point and one set of settings. Continuing in a different physical parameter needs a change in the model function anyway and usually quite different settings, so it gets its own JSON file. Older files with `X0presets` / `activePreset` still load (the active preset is used as `X0`, with a warning); **Save to JSON** converts them to the new format.
 
 ### continuationSettings
 
@@ -152,10 +153,12 @@ Each run writes a new file `Res_<problem>_<timestamp>.mat` to the current folder
 
 **Results Viewer:** choose the X and Y columns from dropdowns; click a row in the data grid to highlight that point; the bifurcation table lists fold/Hopf rows with their α. **Dynamic Test** simulates from the selected point: α is kept for the first third of the time, stepped by the given percentage for the middle third, then returned; the response opens in a new window.
 
+The branch is drawn as a solution diagram: thick black line = stable steady states, thin grey line = unstable, filled circles = fold (limit) points, empty circles = Hopf points. *Show points* overlays the individual continuation points. **Export Figure** copies the diagram into a standalone figure window for further editing and offers to save it as `.fig` (editable), `.png` (300 dpi), `.pdf`, `.svg` or `.emf`.
+
 ## Adding a new problem
 
 1. Write the model function, e.g. `myModel.m` with `F = myModel(X)`, X = [states, parameter] (see [The model function](#the-model-function-rhs)).
-2. Copy one of the example JSON files to `myModel.json` and edit `rhs`, `stateNames`, `paramNames`, at least one preset and the α range.
+2. Copy one of the example JSON files to `myModel.json` and edit `rhs`, `stateNames`, `paramNames`, the starting point `X0` and the α range.
 3. Run `runContinuation(loadProblemInfo('myModel.json'))`, check the values in the dialog, press Run.
 
 Tips:
@@ -172,9 +175,9 @@ The three examples go from a check with a known answer to a full engineering mod
 
 One equation, one parameter: dx/dτ = α + x − x³. The steady states lie on the S-shaped curve α = x³ − x, with exact turning points at x = ±1/√3 ≈ ±0.5774, α = −2/(3√3) ≈ −0.3849 (for x > 0) and +0.3849 (for x < 0). The outer branches are stable and the middle branch is unstable.
 
-- Start: preset `middle_unstable_start` (x = 0, α = 0), direction `both`, α in [−1, 1], dz 0.01 (0.0005–0.05), at most 300 steps per direction.
+- Start: X0 = (x = 0, α = 0), direction `both`, α in [−1, 1], dz 0.01 (0.0005–0.05), at most 300 steps per direction.
 - Expected result: the branch turns exactly at the two points above, and both are reported in `Bif.fold`, none in `Bif.hopf` (all eigenvalues are real).
-- Use it to test the engine itself after any change to the code. The presets `lower_stable_branch` and `upper_stable_branch` (x = −2, α = −6 and x = 2, α = 6) lie outside the stored α range; widen MinAlpha / MaxAlpha before using them.
+- Use it to test the engine itself after any change to the code. Other useful starting points are x = −2, α = −6 and x = 2, α = 6 (on the outer stable branches); they lie outside the stored α range, so widen MinAlpha / MaxAlpha before using them.
 
 ### Example 2 – Cascade of two CSTRs with recycle (`Example2_CSTR_cascade`)
 
@@ -190,10 +193,10 @@ Two stirred reactors in series with a first-order exothermic reaction, taken fro
 The model system of Švandová, Jelemenský, Markoš and Molnár (2005): exothermic hydrolysis of propylene oxide to propylene glycol, with consecutive reactions to di- and tripropylene glycol, in a jacket-cooled CSTR. The paper uses this system for steady-state multiplicity and stability analysis within a HAZOP study.
 
 - Seven states: cA (propylene oxide), cB (water), cC (propylene glycol), cD (dipropylene glycol), cE (tripropylene glycol) in mol/m³, reactor temperature T and coolant temperature Tc in K.
-- Parameter α shifts the feed temperature: Tf = 273.15 + α K.
-- Five presets; the default `feed_temperature` starts at α ≈ −28.6. Direction `backward`, α in [−50, 80], dz 0.1 (0.02–150), at most 1200 steps. The live plot shows α against T.
-- Heat transfer: the switch `useTestHeatTransfer` in the model file is false, which uses the physical values U = 1.65e3 W m⁻² K⁻¹ and A = 6.7 m².
-- `runDynamicTest.m` simulates this model for step changes of α starting from a fixed steady state.
+- Parameter α is the propylene oxide feed flow rate F_A [mol/s] (in the model file `FAf = alpha`). Fixed: water feed F_B = 6 mol/s, feed temperature 26 °C, coolant inlet temperature 15 °C. To continue in another parameter (e.g. F_B or the feed temperature), change the assignment in the model file and use a separate JSON file with its own X0 and settings.
+- Start: X0 at α ≈ 1.0. Direction `backward`, α in [−50, 80], dz 1.0 (0.05–150), at most 1200 steps, at most 4 Newton iterations. The live plot shows α against T.
+- Heat transfer: U·A = 10 kW/K (U = 1 W m⁻² K⁻¹, A = 10 000 m² in the model file).
+- `runDynamicTest.m` simulates this model for step changes of F_A (13.01 → 14, 17.5, 18, 22 mol/s and back). The starting steady state is first computed with `fsolve`, so it stays valid after changes in the model file.
 
 ## References
 

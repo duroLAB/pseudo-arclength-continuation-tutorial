@@ -1,0 +1,258 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Continuation Algorithm — Documentation</title>
+<style>
+:root{
+  --bg:#fbfaf7; --fg:#1f2328; --muted:#5d636b; --line:#e3e0d8; --card:#ffffff;
+  --accent:#1f5f8b; --code-bg:#f2f0ea; --th:#f4f2ec;
+}
+@media (prefers-color-scheme: dark){
+  :root{ --bg:#16181b; --fg:#e6e6e3; --muted:#a0a5ab; --line:#30343a; --card:#1d2024;
+         --accent:#7fb6dc; --code-bg:#24282d; --th:#22262b; }
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{margin:0;background:var(--bg);color:var(--fg);
+  font:16px/1.6 "Segoe UI",system-ui,-apple-system,Roboto,Helvetica,Arial,sans-serif}
+.layout{display:grid;grid-template-columns:240px minmax(0,1fr);max-width:1180px;margin:0 auto;gap:40px;padding:0 24px}
+nav{position:sticky;top:0;align-self:start;max-height:100vh;overflow:auto;padding:40px 0 24px;font-size:14px}
+nav .t{font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;font-size:12px;margin-bottom:8px}
+nav a{display:block;color:var(--fg);text-decoration:none;padding:3px 0 3px 10px;border-left:2px solid var(--line)}
+nav a:hover{color:var(--accent);border-left-color:var(--accent)}
+nav a.sub{padding-left:22px;color:var(--muted)}
+main{padding:40px 0 80px;max-width:820px}
+h1{font-size:32px;line-height:1.2;margin:0 0 6px}
+.byline{color:var(--muted);margin:0 0 32px;font-size:14px}
+h2{font-size:23px;margin:48px 0 12px;padding-top:8px;border-top:1px solid var(--line)}
+h3{font-size:18px;margin:28px 0 8px}
+a{color:var(--accent)}
+code{font-family:Consolas,"Cascadia Mono",Menlo,monospace;font-size:.88em;background:var(--code-bg);padding:1px 5px;border-radius:4px}
+pre{background:var(--code-bg);padding:14px 16px;border-radius:8px;overflow:auto;font-size:14px;line-height:1.5}
+pre code{background:none;padding:0;font-size:inherit}
+table{width:100%;border-collapse:collapse;margin:14px 0;font-size:14.5px;background:var(--card)}
+th,td{border:1px solid var(--line);padding:7px 10px;text-align:left;vertical-align:top}
+th{background:var(--th);font-weight:600}
+td:first-child code{white-space:nowrap}
+.formula{background:var(--card);border:1px solid var(--line);border-radius:8px;padding:14px 18px;margin:14px 0;
+  font-family:"Cambria Math","Times New Roman",serif;font-size:18px;text-align:center}
+.note{border-left:3px solid var(--accent);background:var(--card);padding:10px 14px;margin:14px 0;border-radius:0 6px 6px 0}
+li{margin:4px 0}
+@media (max-width:860px){
+  .layout{grid-template-columns:1fr;gap:0;padding:0 16px}
+  nav{position:static;max-height:none;padding:24px 0 0}
+  main{padding-top:16px}
+  table{display:block;overflow-x:auto}
+}
+@media print{ nav{display:none} .layout{display:block} }
+</style>
+</head>
+<body>
+<div class="layout">
+<nav>
+  <div class="t">Contents</div>
+  <a href="#overview">Overview</a>
+  <a href="#origins">Origins: DERPAR</a>
+  <a href="#numerics">Numerics in brief</a>
+  <a href="#files">Files</a>
+  <a href="#running">Running it</a>
+  <a href="#inputs">Input parameters</a>
+  <a class="sub" href="#rhs">Model function</a>
+  <a class="sub" href="#json">JSON fields</a>
+  <a class="sub" href="#settings">continuationSettings</a>
+  <a href="#outputs">Outputs</a>
+  <a href="#new">Adding a new problem</a>
+  <a href="#examples">Examples</a>
+  <a class="sub" href="#ex1">1 – Cubic fold</a>
+  <a class="sub" href="#ex2">2 – CSTR cascade</a>
+  <a class="sub" href="#ex3">3 – CSTR, 3 reactions</a>
+  <a href="#references">References</a>
+</nav>
+
+<main>
+<h1>Continuation Algorithm — Documentation</h1>
+<p class="byline">MATLAB toolbox for one-parameter continuation of steady states · 2026</p>
+
+<h2 id="overview">Overview</h2>
+<p>This MATLAB package traces a branch of steady states of a nonlinear system f(x, α) = 0 as one parameter α changes, evaluates their stability and marks turning points (folds) and Hopf points. Three examples are bundled, from a one-equation fold benchmark to a seven-state CSTR model (see <a href="#examples">Examples</a>).</p>
+<p>The core is problem-independent: a new problem = one .m function with the right-hand sides + one JSON file describing it. The core code does not change. This document is written for a user who wants to run the algorithm on their own problem.</p>
+
+<h2 id="origins">Origins: DERPAR by Milan Kubíček</h2>
+<p>This toolbox is explicitly inspired by <strong>DERPAR</strong>, the continuation code by Professor Milan Kubíček (University of Chemistry and Technology, Prague), published as <a href="https://dl.acm.org/doi/abs/10.1145/355666.355675">Algorithm 502: Dependence of Solution of Nonlinear Systems on a Parameter</a>, ACM Transactions on Mathematical Software 2(1), 1976.</p>
+<p>Professor Kubíček's idea is elegant and remarkably durable. Differentiate f(x, α) = 0 with respect to arc length, and let the variable that changes fastest along the curve serve as the local parameter. With that one step, the method follows a solution branch through turning points, where plain parameter stepping in α breaks down. Half a century later the scheme is still the backbone of practical continuation in chemical engineering, and it is the backbone of this toolbox too. Together with M. Marek he also wrote <em>Computational Methods in Bifurcation Theory and Dissipative Structures</em> (Springer, 1983), a standard reference in the field.</p>
+<p>The toolbox keeps DERPAR's core idea and changes mainly the implementation. The local parameter k is taken from the tangent obtained by SVD of the full Jacobian, the predictor is a single Euler step along that tangent, and the corrector is MATLAB's <code>fsolve</code> instead of a Newton iteration coded in the routine. The Jacobian is always computed by central differences, the step length follows the number of <code>fsolve</code> iterations, and the branch can be traced in both directions from the starting point. Stability analysis with fold/Hopf detection, a JSON problem file and a graphical interface are additions on top of the original algorithm.</p>
+
+<h2 id="numerics">Numerics in brief</h2>
+<p>The engine follows the solution curve of f(z) = 0, z = [x, α], with NoEQ equations and NoEQ + 1 unknowns. It uses a predictor–corrector scheme with local parametrization: in every step, the variable that changes fastest along the curve is held fixed. That variable can be α or any state, so the branch passes through turning points.</p>
+<p>One continuation step:</p>
+<ol>
+  <li><strong>Jacobian.</strong> J = ∂f/∂z (NoEQ × (NoEQ+1)) by central differences, h = √eps · max(1, |z<sub>i</sub>|).</li>
+  <li><strong>Tangent.</strong> t = last right singular vector of J (its null space). The index k = argmax |t<sub>i</sub>| becomes the local parameter.</li>
+  <li><strong>Predictor.</strong> Solve for the direction β below, then step z ← z + dz · Δz. The sign of each component is carried over from the previous step, so the branch does not turn back.</li>
+  <li><strong>Corrector.</strong> z<sub>k</sub> stays fixed; <code>fsolve</code> solves the remaining NoEQ unknowns (TolFun = TolX = 1e-12, MaxFunEvals = 5000) through <code>continuationResidual</code>.</li>
+  <li><strong>Step control.</strong> If <code>fsolve</code> needed ≥ maxNewtonIters iterations, dz is multiplied by stepDecreaseFactor, otherwise by stepIncreaseFactor. dz is then clamped to [MinIntegrationStepSize, MaxIntegrationStepSize].</li>
+  <li><strong>Stop</strong> when α leaves [MinAlpha, MaxAlpha] or after MaxContIter steps.</li>
+</ol>
+<div class="formula">J<sub>:,−k</sub> β<sub>−k</sub> = −J<sub>:,k</sub>,&emsp; β<sub>k</sub> = 1,&emsp; Δz = ± β / ‖β‖</div>
+<p><strong>Stability.</strong> After the run, the eigenvalues of ∂f/∂x (α fixed) are computed at every point. A point is unstable if any eigenvalue has Re λ &gt; 1e-6. Where the number of unstable eigenvalues changes between two neighbouring points, the point is flagged as a fold if no complex pair is present, otherwise as Hopf. This classification is heuristic: it does not track which eigenvalue actually crossed the imaginary axis.</p>
+
+<h2 id="files">Files</h2>
+<p>For a new problem you write only a model function and its JSON file; the core files are not edited.</p>
+<table>
+<thead><tr><th>File</th><th>Kind</th><th>What it does</th></tr></thead>
+<tbody>
+<tr><td><code>runContinuation.m</code></td><td>core, <strong>main</strong></td><td>Continuation engine. Shows the setup dialog, traces the branch, runs the stability analysis (<code>analyzeBifurcations</code>), saves the results and opens the Results Viewer.</td></tr>
+<tr><td><code>loadProblemInfo.m</code></td><td>core</td><td>Reads a problem JSON into the <code>info</code> struct and turns the <code>rhs</code> name into a function handle.</td></tr>
+<tr><td><code>continuationResidual.m</code></td><td>core</td><td>Adapter between <code>fsolve</code> and the model: puts the fixed (ejected) variable back into the vector before calling <code>rhs</code>.</td></tr>
+<tr><td><code>plotContinuationResults.m</code></td><td>core</td><td>Results Viewer: plot with selectable X/Y columns, table of all points, table of fold/Hopf points, "Dynamic Test" button. Also reopens a saved results file.</td></tr>
+<tr><td><code>Example1_CubicFold.m</code> / <code>.json</code></td><td>example</td><td>One-equation fold benchmark with known exact answer.</td></tr>
+<tr><td><code>Example2_CSTR_cascade.m</code> / <code>.json</code></td><td>example</td><td>Two CSTRs in series with recycle, from Kubíček, Jacák and Marek (1983).</td></tr>
+<tr><td><code>Example3_CSTR_3Reactions.m</code> / <code>.json</code></td><td>example</td><td>CSTR with three reactions and a cooling jacket, after Švandová et al. (2005).</td></tr>
+<tr><td><code>runDynamicTest.m</code></td><td>optional script</td><td>Stand-alone dynamic simulation (<code>ode15s</code>) of Example 3 for step changes of α = F<sub>A</sub>; step values are set at the top of the file.</td></tr>
+</tbody>
+</table>
+
+<h2 id="running">Running it</h2>
+<p>The entry point is <code>runContinuation.m</code>. Put all files in one folder (or on the MATLAB path) and call:</p>
+<pre><code>runContinuation(loadProblemInfo('Example3_CSTR_3Reactions.json'))
+
+% override some settings for this run only
+runContinuation(loadProblemInfo('Example3_CSTR_3Reactions.json'), struct('MaxContIter', 2000))
+
+% no argument: a file picker asks for the problem JSON
+runContinuation()</code></pre>
+<p>Requires MATLAB with the Optimization Toolbox (<code>fsolve</code>). The Dynamic Test uses <code>ode15s</code> from core MATLAB.</p>
+<p>What happens after the call:</p>
+<ol>
+  <li><strong>Setup dialog</strong> with two tabs. <em>Initial Guess</em>: one field per variable, pre-filled from <code>X0</code>. <em>Continuation Settings</em>: all settings from the table below. Buttons: <strong>Run</strong> uses the values for this run only; <strong>Save to JSON</strong> writes them back to the JSON file and keeps the dialog open; <strong>Cancel</strong> stops.</li>
+  <li>The first point is corrected by <code>fsolve</code> with α fixed, so the initial guess only has to be close to a steady state.</li>
+  <li>The branch is traced forward, backward or both ways from that point (setting <code>continuationDirection</code>). With <code>both</code>, the two halves are joined into one ordered branch.</li>
+  <li><strong>Live plot</strong> of the branch during the run (axes set by livePlotXVar / livePlotYVar).</li>
+  <li>Stability analysis, the results file is saved, and the <strong>Results Viewer</strong> opens.</li>
+</ol>
+
+<h2 id="inputs">Input parameters</h2>
+<p>All inputs live in the problem JSON; every value can still be changed in the setup dialog before a run. Settings are applied in three layers: built-in defaults in <code>runContinuation.m</code> → <code>continuationSettings</code> from the JSON → the optional <code>settingsOverride</code> struct.</p>
+
+<h3 id="rhs">The model function (<code>rhs</code>)</h3>
+<ul>
+  <li>Signature <code>F = myModel(X)</code>, where X is a row vector <code>[states, alpha]</code> in the order of <code>stateNames</code> then <code>paramNames</code>.</li>
+  <li>Returns NoEQ values, one per state: the time derivatives dx/dt. Steady states are F = 0; the Dynamic Test integrates the same function with <code>ode15s</code>.</li>
+  <li>Exactly one continuation parameter is supported, and it is the last element of X.</li>
+</ul>
+
+<h3 id="json">JSON fields</h3>
+<table>
+<thead><tr><th>Field</th><th>Type</th><th>Meaning</th></tr></thead>
+<tbody>
+<tr><td><code>rhs</code></td><td>string</td><td>Name of the model function (its file name, without <code>.m</code>).</td></tr>
+<tr><td><code>stateNames</code></td><td>array of strings</td><td>State names, in the order used in X. Their count sets NoEQ.</td></tr>
+<tr><td><code>paramNames</code></td><td>array of 1 string</td><td>Name of the continuation parameter, e.g. <code>"alpha"</code>.</td></tr>
+<tr><td><code>X0</code></td><td>object</td><td>Starting point: one value per state and parameter name.</td></tr>
+<tr><td><code>continuationSettings</code></td><td>object</td><td>Run settings, table below. Any field left out takes the built-in default.</td></tr>
+</tbody>
+</table>
+<p>One JSON file describes one continuation task: one parameter, one starting point and one set of settings. Continuing in a different physical parameter needs a change in the model function anyway and usually quite different settings, so it gets its own JSON file. Older files with <code>X0presets</code> / <code>activePreset</code> still load (the active preset is used as <code>X0</code>, with a warning); <strong>Save to JSON</strong> converts them to the new format.</p>
+
+<h3 id="settings">continuationSettings</h3>
+<table>
+<thead><tr><th>Setting</th><th>Default</th><th>Meaning</th></tr></thead>
+<tbody>
+<tr><td><code>MaxContIter</code></td><td>1200</td><td>Maximum number of continuation steps (per direction).</td></tr>
+<tr><td><code>MinAlpha</code></td><td>-50</td><td>Stop when α falls below this value.</td></tr>
+<tr><td><code>MaxAlpha</code></td><td>80</td><td>Stop when α rises above this value.</td></tr>
+<tr><td><code>continuationDirection</code></td><td><code>'backward'</code></td><td><code>'forward'</code>, <code>'backward'</code> or <code>'both'</code>: which way to trace the branch from the starting point.</td></tr>
+<tr><td><code>InitialIntegrationStepSize</code></td><td>0.1</td><td>Initial continuation step dz (arc length along the curve, not a time step).</td></tr>
+<tr><td><code>MinIntegrationStepSize</code></td><td>0.02</td><td>Lower bound for dz.</td></tr>
+<tr><td><code>MaxIntegrationStepSize</code></td><td>150</td><td>Upper bound for dz.</td></tr>
+<tr><td><code>stepIncreaseFactor</code></td><td>1.3</td><td>dz multiplier after an easy corrector solve.</td></tr>
+<tr><td><code>stepDecreaseFactor</code></td><td>0.5</td><td>dz multiplier after a hard corrector solve.</td></tr>
+<tr><td><code>maxNewtonIters</code></td><td>3</td><td><code>fsolve</code> iteration count from which a solve counts as hard.</td></tr>
+<tr><td><code>runStabilityAnalysis</code></td><td>true</td><td>Compute eigenvalues and fold/Hopf candidates after the run.</td></tr>
+<tr><td><code>livePlotXVar</code></td><td><code>''</code> (→ α)</td><td>Variable name on the live-plot X axis.</td></tr>
+<tr><td><code>livePlotYVar</code></td><td><code>''</code> (→ 4th state)</td><td>Variable name on the live-plot Y axis.</td></tr>
+</tbody>
+</table>
+<p>The example JSON files set their own values; see <a href="#examples">Examples</a> below.</p>
+
+<h3>Hard-coded in runContinuation.m</h3>
+<ul>
+  <li><code>verbose = false</code>: set to true to print Newton iterations and dz for each step.</li>
+  <li><code>livePlot = true</code>: set to false to switch off the live plot (faster).</li>
+  <li><code>fsolve</code> tolerances: TolFun = TolX = 1e-12, MaxFunEvals = 5000.</li>
+</ul>
+
+<h2 id="outputs">Outputs</h2>
+<p>Each run writes a new file <code>Res_&lt;problem&gt;_&lt;timestamp&gt;.mat</code> to the current folder, so earlier runs are kept, and opens the Results Viewer.</p>
+<table>
+<thead><tr><th>Variable</th><th>Size / fields</th><th>Content</th></tr></thead>
+<tbody>
+<tr><td><code>Res</code></td><td>Nop × (NoEQ+1)</td><td>One row per continuation point: states in <code>stateNames</code> order, α in the last column.</td></tr>
+<tr><td><code>Bif.stabStatus</code></td><td>1 × Nop, logical</td><td>true = the point is unstable.</td></tr>
+<tr><td><code>Bif.nUnstable</code>, <code>Bif.maxRe</code></td><td>1 × Nop</td><td>Number of eigenvalues with Re &gt; 0 and the largest real part.</td></tr>
+<tr><td><code>Bif.eigOut</code></td><td>NoEQ × Nop</td><td>All eigenvalues of ∂f/∂x at every point.</td></tr>
+<tr><td><code>Bif.stabChange</code></td><td>row indices</td><td>Points where stability changes.</td></tr>
+<tr><td><code>Bif.fold</code>, <code>Bif.hopf</code></td><td>row indices</td><td>The same points, split into fold and Hopf candidates.</td></tr>
+<tr><td><code>info</code>, <code>settings</code></td><td>structs</td><td>The problem descriptor and the settings actually used.</td></tr>
+</tbody>
+</table>
+<p><code>Bif</code> is empty when runStabilityAnalysis is false. To reopen a run later, also in a new MATLAB session: <code>plotContinuationResults('Res_Example3_CSTR_3Reactions_20260927_143015.mat')</code>, or <code>plotContinuationResults()</code> to pick the file.</p>
+<p><strong>Results Viewer:</strong> choose the X and Y columns from dropdowns; click a row in the data grid to highlight that point; the bifurcation table lists fold/Hopf rows with their α. <strong>Dynamic Test</strong> simulates from the selected point: α is kept for the first third of the time, stepped by the given percentage for the middle third, then returned; the response opens in a new window.</p>
+<p>The branch is drawn as a solution diagram: thick black line = stable steady states, thin grey line = unstable, filled circles = fold (limit) points, empty circles = Hopf points. <em>Show points</em> overlays the individual continuation points. <strong>Export Figure</strong> copies the diagram into a standalone figure window for further editing and offers to save it as <code>.fig</code> (editable), <code>.png</code> (300 dpi), <code>.pdf</code>, <code>.svg</code> or <code>.emf</code>.</p>
+
+<h2 id="new">Adding a new problem</h2>
+<ol>
+  <li>Write the model function, e.g. <code>myModel.m</code> with <code>F = myModel(X)</code>, X = [states, parameter] (see <a href="#rhs">The model function</a>).</li>
+  <li>Copy one of the example JSON files to <code>myModel.json</code> and edit <code>rhs</code>, <code>stateNames</code>, <code>paramNames</code>, the starting point <code>X0</code> and the α range.</li>
+  <li>Run <code>runContinuation(loadProblemInfo('myModel.json'))</code>, check the values in the dialog, press Run.</li>
+</ol>
+<p>Tips:</p>
+<ul>
+  <li>If the run stops after a few steps, the branch probably left the α range: switch <code>continuationDirection</code> (or use <code>'both'</code>) or widen MinAlpha / MaxAlpha.</li>
+  <li>Repeated "fsolve did not converge" warnings: lower MaxIntegrationStepSize or InitialIntegrationStepSize.</li>
+  <li>Close to a fold or Hopf point, compare against a finer run; the classification is a candidate, not a proof.</li>
+</ul>
+
+<h2 id="examples">Examples</h2>
+<p>The three examples go from a check with a known answer to a full engineering model. Each is run as <code>runContinuation(loadProblemInfo('&lt;name&gt;.json'))</code>.</p>
+
+<h3 id="ex1">Example 1 – Cubic fold (<code>Example1_CubicFold</code>)</h3>
+<p>One equation, one parameter: dx/dτ = α + x − x³. The steady states lie on the S-shaped curve α = x³ − x, with exact turning points at x = ±1/√3 ≈ ±0.5774, α = −2/(3√3) ≈ −0.3849 (for x &gt; 0) and +0.3849 (for x &lt; 0). The outer branches are stable and the middle branch is unstable.</p>
+<ul>
+  <li>Start: X0 = (x = 0, α = 0), direction <code>both</code>, α in [−1, 1], dz 0.01 (0.0005–0.05), at most 300 steps per direction.</li>
+  <li>Expected result: the branch turns exactly at the two points above, and both are reported in <code>Bif.fold</code>, none in <code>Bif.hopf</code> (all eigenvalues are real).</li>
+  <li>Use it to test the engine itself after any change to the code. Other useful starting points are x = −2, α = −6 and x = 2, α = 6 (on the outer stable branches); they lie outside the stored α range, so widen MinAlpha / MaxAlpha before using them.</li>
+</ul>
+
+<h3 id="ex2">Example 2 – Cascade of two CSTRs with recycle (<code>Example2_CSTR_cascade</code>)</h3>
+<p>Two stirred reactors in series with a first-order exothermic reaction, taken from Kubíček, Jacák and Marek (1983), Section 13.4, Eq. (13.24), p. 313. Four states: conversions x1, x2 and dimensionless temperatures θ1, θ2. The continuation parameter is the Damköhler number Da1 = Da2.</p>
+<ul>
+  <li>In the JSON the states are named x1–x4 (x3 = θ1, x4 = θ2) and the parameter is named <code>alpha</code> (= Da). The order differs from the book's vector (x1, θ1, x2, θ2).</li>
+  <li>Fixed values: γ = 1000, B = 22, β1 = β2 = 2, θc1 = θc2 = 0, Λ = 1.</li>
+  <li>Start: all states 0 at Da = 0, which is an exact steady state; direction <code>forward</code>, Da in [−1e−5, 0.0595], dz 0.2 (0.1–0.5), factors 1.2 / 0.5, at most 600 steps. The live plot shows Da against θ2.</li>
+  <li>Expected result: the temperature–Da curve folds back on itself, so several steady states exist for the same Da. Check the turning points and stability changes in <code>Bif</code>.</li>
+</ul>
+
+<h3 id="ex3">Example 3 – CSTR with three reactions and cooling (<code>Example3_CSTR_3Reactions</code>)</h3>
+<p>The model system of Švandová, Jelemenský, Markoš and Molnár (2005): exothermic hydrolysis of propylene oxide to propylene glycol, with consecutive reactions to di- and tripropylene glycol, in a jacket-cooled CSTR. The paper uses this system for steady-state multiplicity and stability analysis within a HAZOP study.</p>
+<ul>
+  <li>Seven states: cA (propylene oxide), cB (water), cC (propylene glycol), cD (dipropylene glycol), cE (tripropylene glycol) in mol/m³, reactor temperature T and coolant temperature Tc in K.</li>
+  <li>Parameter α is the propylene oxide feed flow rate F<sub>A</sub> [mol/s] (in the model file <code>FAf = alpha</code>). Fixed: water feed F<sub>B</sub> = 6 mol/s, feed temperature 26 °C, coolant inlet temperature 15 °C. To continue in another parameter (e.g. F<sub>B</sub> or the feed temperature), change the assignment in the model file and use a separate JSON file with its own X0 and settings.</li>
+  <li>Start: X0 at α ≈ 1.0. Direction <code>backward</code>, α in [−50, 80], dz 1.0 (0.05–150), at most 1200 steps, at most 4 Newton iterations. The live plot shows α against T.</li>
+  <li>Heat transfer: U·A = 10 kW/K (U = 1 W m⁻² K⁻¹, A = 10 000 m² in the model file).</li>
+  <li><code>runDynamicTest.m</code> simulates this model for step changes of F<sub>A</sub> (13.01 → 14, 17.5, 18, 22 mol/s and back). The starting steady state is first computed with <code>fsolve</code>, so it stays valid after changes in the model file.</li>
+</ul>
+
+<h2 id="references">References</h2>
+<ul>
+  <li>M. Kubíček: <a href="https://dl.acm.org/doi/abs/10.1145/355666.355675">Algorithm 502: Dependence of Solution of Nonlinear Systems on a Parameter</a>. ACM Transactions on Mathematical Software 2(1), 1976.</li>
+  <li>M. Kubíček, V. Jacák, M. Marek: <em>Numerické algoritmy řešení chemicko-inženýrských úloh</em>. SNTL / Alfa, Praha, 1983 (SNTL 04-614-83).</li>
+  <li>M. Kubíček, M. Marek: <em>Computational Methods in Bifurcation Theory and Dissipative Structures</em>. Springer, 1983.</li>
+  <li>Z. Švandová, Ľ. Jelemenský, J. Markoš, A. Molnár: <a href="https://doi.org/10.1205/psep.04262">Steady States Analysis and Dynamic Simulation as a Complement in the HAZOP Study of Chemical Reactors</a>. Process Safety and Environmental Protection 83(5), 2005, pp. 463–471.</li>
+</ul>
+</main>
+</div>
+</body>
+</html>
