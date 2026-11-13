@@ -38,9 +38,11 @@ function plotContinuationResults(Res, Bif, ProblemFCN, info)
 %     thin grey line    - unstable steady states
 %     filled black circles - fold (limit) points
 %     empty circles     - Hopf bifurcation points
-%   Fold/Hopf markers are placed midway between the two continuation
-%   points between which the number of unstable eigenvalues changed (the
-%   bifurcation table still lists the row index of the second point).
+%   Fold/Hopf markers are placed where the crossing eigenvalue's real
+%   part goes through zero, interpolated between the two continuation
+%   points k-1 and k (Bif.foldFrac / Bif.hopfFrac; midway for results
+%   saved by older versions). The bifurcation table lists row k and the
+%   interpolated alpha.
 %   The "Show points" checkbox additionally overlays the individual
 %   continuation points (useful to check step size control).
 %
@@ -214,7 +216,8 @@ function updatePlot(src)
         % points where the stability changed
         if isfield(data.Bif,'fold') && ~isempty(data.Bif.fold)
             k = data.Bif.fold(:);
-            hF = plot(data.ax, (x(k-1)+x(k))/2, (y(k-1)+y(k))/2, 'o', 'LineStyle','none', ...
+            s = bifFrac(data.Bif,'foldFrac',numel(k));
+            hF = plot(data.ax, x(k-1)+s.*(x(k)-x(k-1)), y(k-1)+s.*(y(k)-y(k-1)), 'o', 'LineStyle','none', ...
                 'MarkerSize',8, 'MarkerEdgeColor','k', 'MarkerFaceColor','k');
             hLeg(end+1) = hF; legTxt{end+1} = 'fold (limit point)';
         end
@@ -222,7 +225,8 @@ function updatePlot(src)
         % Hopf points - empty circles
         if isfield(data.Bif,'hopf') && ~isempty(data.Bif.hopf)
             k = data.Bif.hopf(:);
-            hH = plot(data.ax, (x(k-1)+x(k))/2, (y(k-1)+y(k))/2, 'o', 'LineStyle','none', ...
+            s = bifFrac(data.Bif,'hopfFrac',numel(k));
+            hH = plot(data.ax, x(k-1)+s.*(x(k)-x(k-1)), y(k-1)+s.*(y(k)-y(k-1)), 'o', 'LineStyle','none', ...
                 'MarkerSize',8, 'LineWidth',1.5, 'MarkerEdgeColor','k', 'MarkerFaceColor','w');
             hLeg(end+1) = hH; legTxt{end+1} = 'Hopf';
         end
@@ -230,23 +234,29 @@ function updatePlot(src)
         % ============= Update bifurcation table ===========
         BifRows = {};  % <- cell array
 
-        if isfield(data.Bif,'stabChange')
-            for i = 1:length(data.Bif.stabChange)
-                idx = data.Bif.stabChange(i);
-                BifRows(end+1,:) = {idx, data.Res(idx,end), 'StabChange'}; %#ok<AGROW>
-            end
-        end
+        % fold and Hopf rows with the interpolated alpha (every stability
+        % change is one of them, so a separate "StabChange" row would only
+        % duplicate them), sorted by row index
+        aCol = data.Res(:,end);
         if isfield(data.Bif,'fold')
+            sF = bifFrac(data.Bif,'foldFrac',numel(data.Bif.fold));
             for i = 1:length(data.Bif.fold)
                 idx = data.Bif.fold(i);
-                BifRows(end+1,:) = {idx, data.Res(idx,end), 'Fold'}; %#ok<AGROW>
+                aI = aCol(idx-1) + sF(i)*(aCol(idx)-aCol(idx-1));
+                BifRows(end+1,:) = {idx, aI, 'Fold'}; %#ok<AGROW>
             end
         end
         if isfield(data.Bif,'hopf')
+            sH = bifFrac(data.Bif,'hopfFrac',numel(data.Bif.hopf));
             for i = 1:length(data.Bif.hopf)
                 idx = data.Bif.hopf(i);
-                BifRows(end+1,:) = {idx, data.Res(idx,end), 'Hopf'}; %#ok<AGROW>
+                aI = aCol(idx-1) + sH(i)*(aCol(idx)-aCol(idx-1));
+                BifRows(end+1,:) = {idx, aI, 'Hopf'}; %#ok<AGROW>
             end
+        end
+        if ~isempty(BifRows)
+            [~,ord] = sort(cell2mat(BifRows(:,1)));
+            BifRows = BifRows(ord,:);
         end
         set(data.tblBif,'Data',BifRows);
 
@@ -300,10 +310,10 @@ end
 function runDynamicsTest(src,~)
     % Run a dynamic test from the currently selected point:
     %   - initial condition = state variables at data.currentIndex
-    %   - a dialog asks for the integration time and a step change of
-    %     parameter alpha, given as a percentage
-    %   - profile: alpha0 (first 1/3 of the time) -> step to
-    %     alpha0*(1+p/100) (middle 1/3) -> back to alpha0 (last 1/3),
+    %   - a dialog asks for the integration time and the new value of
+    %     parameter alpha (absolute value, pre-filled with alpha0 + 10 %)
+    %   - profile: alpha0 (first 1/3 of the time) -> step to the new
+    %     value alphaNew (middle 1/3) -> back to alpha0 (last 1/3),
     %     the same pattern as in runDynamicTest.m
     %   - the result (selected state variable and the alpha profile that
     %     caused it) is plotted in a new figure
@@ -316,20 +326,19 @@ function runDynamicsTest(src,~)
     alpha0 = data.Res(idx,end);
 
     prompt = {sprintf('Current point: row %d, alpha0 = %.6g\nIntegration time [s]:', idx, alpha0), ...
-              'Step change of parameter alpha [%]:'};
-    answer = inputdlg(prompt, 'Dynamic Test Settings', [1 60], {'30000','10'});
+              'New value of parameter alpha (middle third of the time):'};
+    answer = inputdlg(prompt, 'Dynamic Test Settings', [1 60], ...
+                      {'30000', num2str(alpha0*1.1, '%.6g')});
     if isempty(answer)
         return
     end
 
     tEnd = str2double(answer{1});
-    pct  = str2double(answer{2});
-    if isnan(tEnd) || tEnd <= 0 || isnan(pct)
-        errordlg('Invalid input - enter a positive number for the integration time and a number for the percentage.');
+    alphaNew = str2double(answer{2});
+    if isnan(tEnd) || tEnd <= 0 || isnan(alphaNew)
+        errordlg('Invalid input - enter a positive number for the integration time and a number for the new value of alpha.');
         return
     end
-
-    alphaNew = alpha0 * (1 + pct/100);
     t1 = tEnd/3;
     t2 = 2*tEnd/3;
 
@@ -359,8 +368,18 @@ function runDynamicsTest(src,~)
     yyaxis(axDyn,'right');
     plot(axDyn, t, alphaProfile, 'r-');
     ylabel(axDyn, '\alpha');
-    title(axDyn, sprintf('Initial point = row %d, \\alpha_0 = %.4g, step = %+.3g %%', idx, alpha0, pct));
+    title(axDyn, sprintf('Initial point = row %d, \\alpha: %.6g \\rightarrow %.6g', idx, alpha0, alphaNew));
     legend(axDyn, {varLabel, '\alpha'}, 'Location','best');
+end
+
+function s = bifFrac(Bif, fieldName, n)
+    % Interpolation fractions for fold/Hopf markers; 0.5 (midway) for
+    % results saved before Bif.foldFrac/hopfFrac existed.
+    if isfield(Bif, fieldName) && numel(Bif.(fieldName)) == n
+        s = Bif.(fieldName)(:);
+    else
+        s = 0.5*ones(n,1);
+    end
 end
 
 function exportFigure(src,~)

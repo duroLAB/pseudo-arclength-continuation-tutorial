@@ -46,7 +46,7 @@ $$
 J_{:,-k}\,\beta_{-k} = -J_{:,k}, \qquad \beta_k = 1, \qquad \Delta z = \pm\frac{\beta}{\lVert \beta \rVert}
 $$
 
-**Stability.** After the run, the eigenvalues of ∂f/∂x (α fixed) are computed at every point. A point is unstable if any eigenvalue has Re λ > 1e-6. Where the number of unstable eigenvalues changes between two neighbouring points, the point is flagged as a fold if no complex pair is present, otherwise as Hopf. This classification is heuristic: it does not track which eigenvalue actually crossed the imaginary axis.
+**Stability.** After the run, the eigenvalues of ∂f/∂x (α fixed) are computed at every point. The Jacobian is evaluated at each converged point (the same Jacobian then serves as the predictor of the next step). A point is unstable if any eigenvalue has Re λ > 10⁻⁸ · max|λ| (a relative tolerance, independent of the time unit). Where the number of unstable eigenvalues changes between two neighbouring points, real eigenvalues and complex pairs are counted separately: a complex pair crossing the imaginary axis is reported as Hopf, a real eigenvalue crossing zero as a fold. The position of the crossing is estimated by linear interpolation of the real part of the crossing eigenvalue between the two points. It is still a detection between two points, not an exact location.
 
 ## Files
 
@@ -146,12 +146,13 @@ Each run writes a new file `Res_<problem>_<timestamp>.mat` to the current folder
 | `Bif.nUnstable`, `Bif.maxRe` | 1 × Nop | Number of eigenvalues with Re > 0 and the largest real part. |
 | `Bif.eigOut` | NoEQ × Nop | All eigenvalues of ∂f/∂x at every point. |
 | `Bif.stabChange` | row indices | Points where stability changes. |
-| `Bif.fold`, `Bif.hopf` | row indices | The same points, split into fold and Hopf candidates. |
+| `Bif.fold`, `Bif.hopf` | row indices | The same points, split into fold (real eigenvalue crossed zero) and Hopf (complex pair crossed the imaginary axis). |
+| `Bif.foldFrac`, `Bif.hopfFrac` | 0–1 | Interpolated position of each crossing between rows k−1 (0) and k (1). |
 | `info`, `settings` | structs | The problem descriptor and the settings actually used. |
 
 `Bif` is empty when runStabilityAnalysis is false. To reopen a run later, also in a new MATLAB session: `plotContinuationResults('Res_Example3_CSTR_3Reactions_20260927_143015.mat')`, or `plotContinuationResults()` to pick the file.
 
-**Results Viewer:** choose the X and Y columns from dropdowns; click a row in the data grid to highlight that point; the bifurcation table lists fold/Hopf rows with their α. **Dynamic Test** simulates from the selected point: α is kept for the first third of the time, stepped by the given percentage for the middle third, then returned; the response opens in a new window.
+**Results Viewer:** choose the X and Y columns from dropdowns; click a row in the data grid to highlight that point; the bifurcation table lists fold/Hopf rows with their α. **Dynamic Test** simulates from the selected point: α is kept for the first third of the time, changed to the entered value of α for the middle third, then returned; the response opens in a new window.
 
 The branch is drawn as a solution diagram: thick black line = stable steady states, thin grey line = unstable, filled circles = fold (limit) points, empty circles = Hopf points. *Show points* overlays the individual continuation points. **Export Figure** copies the diagram into a standalone figure window for further editing and offers to save it as `.fig` (editable), `.png` (300 dpi), `.pdf`, `.svg` or `.emf`.
 

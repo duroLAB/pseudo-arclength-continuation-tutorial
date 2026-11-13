@@ -291,9 +291,12 @@ function [Res, ResJac] = runContinuationBranch(X0, direction, ProblemFCN, NoEQ, 
 %settings.continuationDirection is 'both'.
 %
 %   Returns Res (one row per accepted continuation step) and ResJac (the
-%   Jacobian used to compute each step's predictor, i.e. the Jacobian at
-%   the point the step was taken FROM - one index "behind" Res, same
-%   convention the algorithm always used). X0 itself is not included in
+%   Jacobian df/dx evaluated AT the converged point stored in the same row
+%   of Res). The Jacobian computed at the end of a step is also reused as
+%   the predictor Jacobian of the next step, so this costs no extra
+%   function evaluations. (Earlier versions stored the predictor Jacobian,
+%   i.e. the one at the PREVIOUS point, which shifted the stability
+%   status one step along the branch.) X0 itself is not included in
 %   Res, matching the original behavior, where the starting point was
 %   likewise never stored, only the points after each accepted step.
 
@@ -327,25 +330,11 @@ ResJac = zeros(MaxContIter, NoEQ, NoEQ);
 
 Nop = 0;
 
+% Jacobian at the starting point; inside the loop JAC always holds the
+% Jacobian at the current (converged) point X
+JAC = numericalJacobian(X, ProblemFCN, NoEQ);
+
 for cyk=1:MaxContIter
-
-    delta = sqrt(eps);
-
-    FF = continuationResidual(X,ProblemFCN,0,0,0);
-    for g = 1:NoEQ+1
-        nF_plus  = X;
-        nF_minus = X;
-
-        h = delta * max(1, abs(X(g)));
-
-        nF_plus(g)  = nF_plus(g)  + h;
-        nF_minus(g) = nF_minus(g) - h;
-
-        F_plus  = continuationResidual(nF_plus,ProblemFCN,0,0,0);
-        F_minus = continuationResidual(nF_minus,ProblemFCN,0,0,0);
-
-        JAC(:,g) = (F_plus - F_minus) / (2*h);
-    end
 
     % Choose k as the variable with the largest component in the tangent
     % vector (null space of JAC) for stable continuation
@@ -406,6 +395,10 @@ for cyk=1:MaxContIter
         dz = MaxIntegrationStepSize;
     end
 
+    % Jacobian at the new converged point - used for the stability
+    % analysis of THIS point and as the predictor Jacobian of the next step
+    JAC = numericalJacobian(X, ProblemFCN, NoEQ);
+
     Nop = Nop+1;
 
     Res(Nop,:) = X;
@@ -427,6 +420,27 @@ end
 
 Res    = Res(1:Nop,:);
 ResJac = ResJac(1:Nop,:,:);
+
+
+function JAC = numericalJacobian(X, ProblemFCN, NoEQ)
+%NUMERICALJACOBIAN Jacobian of the model w.r.t. all variables (states and
+%alpha), NoEQ x (NoEQ+1), by central differences at the point X.
+delta = sqrt(eps);
+JAC = zeros(NoEQ, NoEQ+1);
+for g = 1:NoEQ+1
+    nF_plus  = X;
+    nF_minus = X;
+
+    h = delta * max(1, abs(X(g)));
+
+    nF_plus(g)  = nF_plus(g)  + h;
+    nF_minus(g) = nF_minus(g) - h;
+
+    F_plus  = continuationResidual(nF_plus,ProblemFCN,0,0,0);
+    F_minus = continuationResidual(nF_minus,ProblemFCN,0,0,0);
+
+    JAC(:,g) = (F_plus(:) - F_minus(:)) / (2*h);
+end
 
 
 function [X, settings] = getRunConfig(info, settings)
@@ -764,64 +778,109 @@ uiresume(figHandle);
 
 
 function Bif = analyzeBifurcations(ResJac, tol)
-%ANALYZEBIFURCATIONS Stability evaluation and fold/Hopf candidate
-%detection along the continuation branch.
-%   ResJac - Nop x NoEQ x NoEQ, Jacobian (df/dx at fixed alpha) at every point
-%   tol    - tolerance for a "zero" real part of an eigenvalue (default 1e-6)
+%ANALYZEBIFURCATIONS Stability evaluation and fold/Hopf detection along
+%the continuation branch.
+%   ResJac - Nop x NoEQ x NoEQ, Jacobian df/dx (alpha fixed) evaluated at
+%            every point of Res
+%   tol    - RELATIVE tolerance for a "zero" real part of an eigenvalue:
+%            Re(lambda) > tol*max|lambda| counts as unstable (default
+%            1e-8). Relative, so the result does not depend on the time
+%            unit of the model (s, min, h, dimensionless).
 %
 %   Bif.stabStatus - true/false for every point (true = unstable)
-%   Bif.stabChange - indices of points where the number of unstable
-%                    eigenvalues changed
-%   Bif.fold       - subset of stabChange classified as fold (no complex pair)
-%   Bif.hopf       - subset of stabChange classified as Hopf (with a complex pair)
+%   Bif.nUnstable  - number of eigenvalues with Re > 0 at every point
+%   Bif.maxRe      - largest real part at every point
+%   Bif.stabChange - indices k where the number of unstable eigenvalues
+%                    differs between points k-1 and k
+%   Bif.fold       - subset of stabChange where a REAL eigenvalue crossed
+%                    zero (limit point / branch point)
+%   Bif.hopf       - subset of stabChange where a COMPLEX PAIR crossed the
+%                    imaginary axis
+%   Bif.foldFrac, Bif.hopfFrac - for every fold/Hopf index k, the
+%                    estimated position of the crossing between points k-1
+%                    (0) and k (1), from linear interpolation of the real
+%                    part of the crossing eigenvalue (0.5 if it cannot be
+%                    identified)
 %   Bif.eigOut     - Jacobian eigenvalues at every point (nX x Nop)
 %
-%   NOTE: the fold/Hopf classification is heuristic - it is based on
-%   whether ANY complex pair exists among the eigenvalues at that point,
-%   not necessarily the one that actually crossed zero. A more accurate
-%   classification would need to track the specific eigenvalue that
-%   changes stability.
+%   Classification: the unstable eigenvalues are counted separately as
+%   real ones and members of complex pairs. A change in the number of
+%   unstable complex eigenvalues (by 2, a pair) is a Hopf point, an odd
+%   change in the number of unstable real eigenvalues is a fold. This
+%   identifies which eigenvalue actually crossed, unlike the previous
+%   version, which called every stability change "Hopf" whenever ANY
+%   complex pair existed at that point (also a stable, unrelated one).
+%   Still a detection between two continuation points, not an exact
+%   location: with large steps two events can fall into one interval
+%   (then both are reported) - refine the step near the point if needed.
 
-if nargin < 2
-    tol = 1e-6;
+if nargin < 2 || isempty(tol)
+    tol = 1e-8;
 end
 
 Nop = size(ResJac,1);
 nX  = size(ResJac,2);
 
-nUnstable  = zeros(1,Nop);
+nUnstReal  = zeros(1,Nop);
+nUnstCplx  = zeros(1,Nop);
+reNearReal = nan(1,Nop);   % real eigenvalue closest to zero
+reNearCplx = nan(1,Nop);   % real part of the complex eigenvalue closest to the imaginary axis
 maxRe      = zeros(1,Nop);
-hasComplex = false(1,Nop);
 eigOut     = zeros(nX,Nop);
 
 % --- Eigenvalues at every point ---
 for k = 1:Nop
-    J  = squeeze(ResJac(k,:,:));
+    J  = reshape(ResJac(k,:,:), nX, nX);
     e  = eig(J);
     re = real(e);
-    im = imag(e);
+    isCplx = imag(e) ~= 0;   % eig of a real matrix returns real eigenvalues with exactly zero imaginary part
 
-    eigOut(:,k)   = e;
-    maxRe(k)      = max(re);
-    nUnstable(k)  = sum(re > tol);
-    hasComplex(k) = any(abs(im) > tol);
+    tolK = tol * max(abs(e));
+    isUnst = re > tolK;
+
+    eigOut(:,k)  = e;
+    maxRe(k)     = max(re);
+    nUnstReal(k) = sum(isUnst & ~isCplx);
+    nUnstCplx(k) = sum(isUnst &  isCplx);
+
+    if any(~isCplx)
+        r = re(~isCplx);
+        [~,i] = min(abs(r));
+        reNearReal(k) = r(i);
+    end
+    if any(isCplx)
+        r = re(isCplx);
+        [~,i] = min(abs(r));
+        reNearCplx(k) = r(i);
+    end
 end
 
+nUnstable  = nUnstReal + nUnstCplx;
 stabStatus = nUnstable > 0;
 
 % --- Detection of stability changes / fold / Hopf ---
 stabChange = [];
-fold = [];
-hopf = [];
+fold = [];  foldFrac = [];
+hopf = [];  hopfFrac = [];
 
 for k = 2:Nop
-    if nUnstable(k) ~= nUnstable(k-1)
-        stabChange(end+1) = k; %#ok<AGROW>
-        if hasComplex(k)
-            hopf(end+1) = k; %#ok<AGROW>
-        else
-            fold(end+1) = k; %#ok<AGROW>
-        end
+    if nUnstable(k) == nUnstable(k-1)
+        continue
+    end
+    stabChange(end+1) = k; %#ok<AGROW>
+
+    dReal = nUnstReal(k) - nUnstReal(k-1);
+    dCplx = nUnstCplx(k) - nUnstCplx(k-1);
+    isHopf = false;
+
+    if dCplx ~= 0 && mod(dCplx,2) == 0
+        isHopf = true;
+        hopf(end+1)     = k; %#ok<AGROW>
+        hopfFrac(end+1) = crossingFraction(reNearCplx(k-1), reNearCplx(k)); %#ok<AGROW>
+    end
+    if mod(dReal,2) ~= 0 || ~isHopf
+        fold(end+1)     = k; %#ok<AGROW>
+        foldFrac(end+1) = crossingFraction(reNearReal(k-1), reNearReal(k)); %#ok<AGROW>
     end
 end
 
@@ -830,6 +889,18 @@ Bif.stabStatus = stabStatus;
 Bif.stabChange = stabChange;
 Bif.fold       = fold;
 Bif.hopf       = hopf;
+Bif.foldFrac   = foldFrac;
+Bif.hopfFrac   = hopfFrac;
 Bif.maxRe      = maxRe;
 Bif.nUnstable  = nUnstable;
 Bif.eigOut     = eigOut;
+
+
+function s = crossingFraction(r1, r2)
+%CROSSINGFRACTION Where between two points (0..1) the real part r goes
+%through zero, by linear interpolation; 0.5 if there is no sign change.
+if isfinite(r1) && isfinite(r2) && r1*r2 < 0
+    s = r1 / (r1 - r2);
+else
+    s = 0.5;
+end
