@@ -96,7 +96,7 @@ li{margin:4px 0}
   <li><strong>Stop</strong> when α leaves [MinAlpha, MaxAlpha] or after MaxContIter steps.</li>
 </ol>
 <div class="formula">J<sub>:,−k</sub> β<sub>−k</sub> = −J<sub>:,k</sub>,&emsp; β<sub>k</sub> = 1,&emsp; Δz = ± β / ‖β‖</div>
-<p><strong>Stability.</strong> After the run, the eigenvalues of ∂f/∂x (α fixed) are computed at every point. A point is unstable if any eigenvalue has Re λ &gt; 1e-6. Where the number of unstable eigenvalues changes between two neighbouring points, the point is flagged as a fold if no complex pair is present, otherwise as Hopf. This classification is heuristic: it does not track which eigenvalue actually crossed the imaginary axis.</p>
+<p><strong>Stability.</strong> After the run, the eigenvalues of ∂f/∂x (α fixed) are computed at every point. The Jacobian is evaluated at each converged point (the same Jacobian then serves as the predictor of the next step). A point is unstable if any eigenvalue has Re λ &gt; 10⁻⁸ · max|λ| (a relative tolerance, independent of the time unit). Where the number of unstable eigenvalues changes between two neighbouring points, real eigenvalues and complex pairs are counted separately: a complex pair crossing the imaginary axis is reported as Hopf, a real eigenvalue crossing zero as a fold. The position of the crossing is estimated by linear interpolation of the real part of the crossing eigenvalue between the two points. It is still a detection between two points, not an exact location.</p>
 
 <h2 id="files">Files</h2>
 <p>For a new problem you write only a model function and its JSON file; the core files are not edited.</p>
@@ -194,12 +194,13 @@ runContinuation()</code></pre>
 <tr><td><code>Bif.nUnstable</code>, <code>Bif.maxRe</code></td><td>1 × Nop</td><td>Number of eigenvalues with Re &gt; 0 and the largest real part.</td></tr>
 <tr><td><code>Bif.eigOut</code></td><td>NoEQ × Nop</td><td>All eigenvalues of ∂f/∂x at every point.</td></tr>
 <tr><td><code>Bif.stabChange</code></td><td>row indices</td><td>Points where stability changes.</td></tr>
-<tr><td><code>Bif.fold</code>, <code>Bif.hopf</code></td><td>row indices</td><td>The same points, split into fold and Hopf candidates.</td></tr>
+<tr><td><code>Bif.fold</code>, <code>Bif.hopf</code></td><td>row indices</td><td>The same points, split into fold (real eigenvalue crossed zero) and Hopf (complex pair crossed the imaginary axis).</td></tr>
+<tr><td><code>Bif.foldFrac</code>, <code>Bif.hopfFrac</code></td><td>0–1</td><td>Interpolated position of each crossing between rows k−1 (0) and k (1).</td></tr>
 <tr><td><code>info</code>, <code>settings</code></td><td>structs</td><td>The problem descriptor and the settings actually used.</td></tr>
 </tbody>
 </table>
 <p><code>Bif</code> is empty when runStabilityAnalysis is false. To reopen a run later, also in a new MATLAB session: <code>plotContinuationResults('Res_Example3_CSTR_3Reactions_20260927_143015.mat')</code>, or <code>plotContinuationResults()</code> to pick the file.</p>
-<p><strong>Results Viewer:</strong> choose the X and Y columns from dropdowns; click a row in the data grid to highlight that point; the bifurcation table lists fold/Hopf rows with their α. <strong>Dynamic Test</strong> simulates from the selected point: α is kept for the first third of the time, stepped by the given percentage for the middle third, then returned; the response opens in a new window.</p>
+<p><strong>Results Viewer:</strong> choose the X and Y columns from dropdowns; click a row in the data grid to highlight that point; the bifurcation table lists fold/Hopf rows with their α. <strong>Dynamic Test</strong> simulates from the selected point: α is kept for the first third of the time, changed to the entered value of α for the middle third, then returned; the response opens in a new window.</p>
 <p>The branch is drawn as a solution diagram: thick black line = stable steady states, thin grey line = unstable, filled circles = fold (limit) points, empty circles = Hopf points. <em>Show points</em> overlays the individual continuation points. <strong>Export Figure</strong> copies the diagram into a standalone figure window for further editing and offers to save it as <code>.fig</code> (editable), <code>.png</code> (300 dpi), <code>.pdf</code>, <code>.svg</code> or <code>.emf</code>.</p>
 
 <h2 id="new">Adding a new problem</h2>

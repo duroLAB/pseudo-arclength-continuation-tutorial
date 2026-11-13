@@ -59,22 +59,16 @@ function PS = reactorEquations(par, alpha)
 cA=par(1);  cB=par(2); cC=par(3); T=par(4); Tc=par(5); cD=par(6); cE=par(7);
 
 %% ---- constants ----
-%  Propylene oxide   Water           Propylene glycol   Dipropylene glycol  Tripropylene glycol  Methanol
-Mh=[58.08e-3	   18.02e-3        76.11e-3          134.17e-3          192.26e-3      32.04e-3]; % kg/mol
+%  Propylene oxide   Water           Propylene glycol   Dipropylene glycol  Tripropylene glycol
+Mh=[58.08e-3	   18.02e-3        76.11e-3          134.17e-3          192.26e-3]; % kg/mol
 
-roa=[1.4855,           0,          1.015             0.65838            0.44619        2.3267 ];   % kmol/m3
-rob=[0.2763            0           0.25071           0.265              0.26591        0.27073];
-roc=[482.25            0           676.4             654                677              512.5];
-rod=[0.29365           0           0.23083           0.2857             0.24367        0.24713];
+% liquid molar densities: see getPureComponentMolarDensity below
 
-ro_water=[17.863 58.606 -95.396 213.89 -141.26]*1000; % mol/m3
-Tc_water=647.13; % kelvin
-
-cpa=[167910         276370            0             141370              129010           256040]/1000;  %J/mol/K
-cpb=[-696.6	        -2090.1           0              619.5              996.27          -2741.4]/1000;
-cpc=[2.45           8.125             0                0                0.1742           14.777]/1000;
-cpd=[-0.0021734     -0.01412          0                0                  0            -0.03508]/1000;
-cpe=[0              9.37e-6           0                0                  0             3.27e-5]/1000;
+cpa=[167910         276370            0             141370              129010]/1000;  %J/mol/K
+cpb=[-696.6	        -2090.1           0              619.5              996.27]/1000;
+cpc=[2.45           8.125             0                0                0.1742]/1000;
+cpd=[-0.0021734     -0.01412          0                0                  0]/1000;
+cpe=[0              9.37e-6           0                0                  0]/1000;
 
 cp_propylene_glycol=[265720 1754.6 20442 -281090 0]/1000; %J/mol/K
 Tc_propylene_glycol=626; % kelvin
@@ -82,43 +76,43 @@ Tc_propylene_glycol=626; % kelvin
 %% ---- input data ----
 VR=1; %m3
 N_coolant=391; %coolant medium holdup, mol
-n_coolant=105; %mol/s
 
+
+%% -----parameters ideal for continuation------
+n_coolant=105; %mol/s
 Tc_feed=15+273.15; % K 
+Tf = 26+273.15; % Normal feed temperature
+FAf = 11.94; %mol/s
+FBf = 7;  %mol/s 
+FAf = alpha;
+%FBf = alpha;  %mol/s 
+
 
 
 %U*A = 10 kWK-1
 U = 1;       % (J s^-1 m^-2 K^-1) - test value
 A = 10000;   % m2                 - test value
 
-%feed
-n_methanol=0;             %mol/s
-cF=0;
 
-FAf = 11.94; %mol/s
-FAf = alpha;
-FBf = 6;  %mol/s 
-%FBf = alpha;  %mol/s 
 
-Ff=[FAf, FBf, 0, 0, 0, n_methanol]; %mol/s
-%Tf = 273.15 + alpha; % Tf depends on the continuation parameter alpha
-Tf = 26+273.15; % Normal feed temperature
+Ff=[FAf, FBf, 0, 0, 0]; %mol/s
+
 
 %A: n_PO (propylene oxide) 43->11.94444
 %B: n_H2O (water) 21.6->6 kmol/h
 
 %% ---- kinetic parameters ----
-kvoo1=89545;      %m3/mol/s -85966 -89545,0000000000
+kvoo1=96000;      %m3/mol/s -85966 -89545,0000000000
 E1=75362.0;       %J/mol
-drHref1=-91360.0; %J/mol; ref. at 25 C
+drHref1=-89545.0000000000; %J/mol; ref. at 25 C
 
 kvoo2=9600;      %m3/mol/s
 E2=82899.0;       %J/mol
-drHref2=-111005.7; %J/mol; ref. at 25 C
+drHref2=-111005.677883473; %J/mol; ref. at 25 C
 
 kvoo3=960;      %m3/mol/s
 E3=91189;       %J/mol
-drHref3= -108880.0;  %  J/mol; ref. at 25 C  
+drHref3= -108880.000000000;  %  J/mol; ref. at 25 C  
 
 
 %% ---- feed calculations ----
@@ -129,20 +123,20 @@ ro_feed = getPureComponentMolarDensity(Tf);         % mol/m3 (correlation, tempe
 Vfi=Ff./(ro_feed); % volumetric flow of each component  % m3/s
 Vf=sum(Vfi); % total feed volumetric flow
 cf=Ff./Vf;   % feed concentrations                       mol/m3
-cAf=cf(1);  cBf=cf(2); cCf=cf(3); cDf=cf(4);  cEf=cf(5); cFf=cf(6);
+cAf=cf(1);  cBf=cf(2); cCf=cf(3); cDf=cf(4);  cEf=cf(5);
 
 %% ---- heat exchanged ----
 % for T
 Q=U*A*(Tc-T);
 
 %% ---- enthalpies and heat capacities ----
-% T and Tf at Tref = 298
-Tref=298;
+% T and Tf, sensible enthalpies relative to Tref = 25 C
+Tref=298.15; % K, reference temperature of drHref1..3
 cp_T=cpa+cpb*(T)+cpc*(T)^2+cpd*(T)^3+cpe*(T)^4;
 tau_propylene_glycol=1-T/Tc_propylene_glycol;
 cp_propylene_glycol_T=cp_propylene_glycol(1)+cp_propylene_glycol(2)/tau_propylene_glycol+cp_propylene_glycol(3)*tau_propylene_glycol+cp_propylene_glycol(4)*tau_propylene_glycol^2+cp_propylene_glycol(5)*tau_propylene_glycol^3; %J/kmol/K
 cp_T(3)=cp_propylene_glycol_T;
-CiCpi=cp_T(1)*cA+cp_T(2)*cB+cp_T(3)*cC+cp_T(4)*cD+cp_T(5)*cE+cp_T(6)*cF;
+CiCpi=cp_T(1)*cA+cp_T(2)*cB+cp_T(3)*cC+cp_T(4)*cD+cp_T(5)*cE;
 
 
 tau_propylene_glycol_ref=1-Tref/Tc_propylene_glycol;
@@ -163,22 +157,26 @@ Cp_coolant=cpa(2)+cpb(2)*Tc+cpc(2)*Tc^2+cpd(2)*Tc^3+cpe(2)*Tc^4;
 h_coolant= cpa(2)*Tc +cpb(2)/2*Tc^2 +cpc(2)/3*Tc^3 +cpd(2)/4*Tc^4 +cpe(2)/5*Tc^5;
 h_coolant_feed=cpa(2)*Tc_feed+cpb(2)/2*Tc_feed^2+cpc(2)/3*Tc_feed^3+cpd(2)/4*Tc_feed^4+cpe(2)/5*Tc_feed^5;
 
-% reaction enthalpy change at Tref = 298
-Tref=298;
-h_propylene_glycol_Hr=-Tc_propylene_glycol*[cp_propylene_glycol(1)*(tau_propylene_glycol-tau_propylene_glycol_ref)+cp_propylene_glycol(2)*(log(tau_propylene_glycol)-log(tau_propylene_glycol_ref))+cp_propylene_glycol(3)/2*(tau_propylene_glycol^2-tau_propylene_glycol_ref^2)+cp_propylene_glycol(4)/3*(tau_propylene_glycol^3-tau_propylene_glycol_ref^3)+cp_propylene_glycol(5)/4*(tau_propylene_glycol^4-tau_propylene_glycol_ref^4)];
-h_Hr= cpa*(T-Tref) +cpb/2*(T^2-Tref^2) +cpc/3*(T^3-Tref^3) +cpd/4*(T^4-Tref^4) +cpe/5*(T^5-Tref^5);
-h_Hr(3)=h_propylene_glycol_Hr;
-drH1=drHref1+(-h_Hr(1)-h_Hr(2)+h_Hr(3));
-drH2=drHref2+(-h_Hr(1)-h_Hr(3)+h_Hr(4));
-drH3=drHref3+(-h_Hr(1)-h_Hr(4)+h_Hr(5));
+% reaction enthalpies at reactor temperature T - Kirchhoff's law:
+%   drH_j(T) = drH_j(Tref) + integral_Tref^T (sum_i nu_ij*cp_i) dT
+%            = drH_j(Tref) + sum_i nu_ij*h_i(T)
+% where h_i(T) = integral_Tref^T cp_i dT is the sensible enthalpy h_T
+% computed above (same Tref = 25 C as drHref1..3).
+%   1: A + B -> C,  2: A + C -> D,  3: A + D -> E
+drH1=drHref1+(-h_T(1)-h_T(2)+h_T(3));
+drH2=drHref2+(-h_T(1)-h_T(3)+h_T(4));
+drH3=drHref3+(-h_T(1)-h_T(4)+h_T(5));
+% drH1=drHref1; 
+% drH2=drHref2;
+% drH3=drHref3;
 drH=[drH1 drH2 drH3];
 
 %% ---- volumetric flow ----
 % for T, cA, cB, cC, cD, cE
 ro = getPureComponentMolarDensity(T);               % mol/m3 (correlation, temperature clamped to valid range)
 
-c_total=cA+cB+cC+cD+cE+cF;
-x(1)=cA/c_total; x(2)=cB/c_total; x(3)=cC/c_total; x(4)=cD/c_total; x(5)=cE/c_total; x(6)=cF/c_total;
+c_total=cA+cB+cC+cD+cE;
+x(1)=cA/c_total; x(2)=cB/c_total; x(3)=cC/c_total; x(4)=cD/c_total; x(5)=cE/c_total;
 
 ro_mix_molar=(sum(x./ro))^-1;      %molar mixture density      mol/m3
 Mh_mix=sum(x.*Mh);                 %molar mass of the mixture  kg/mol
@@ -216,7 +214,6 @@ function ro = getPureComponentMolarDensity(T)
 % C - propylene glycol, valid range 213 - 676 K
 % D - dipropylene glycol, valid range 233 - 654 K
 % E - tripropylene glycol, valid range 228 - 677 K
-% F - methanol, valid range 175 - 512.50 K
 % test
 %     300         450
 % A 1.41341E+04 9614.541
@@ -224,21 +221,19 @@ function ro = getPureComponentMolarDensity(T)
 % C 1.35548E+04 1.18573E+04
 % D 7572.06 6437.22
 % E 5291.428 4629.935
-% F 2.45876E+04 1.86885E+04
 Tthreshold = [161 482;
               273 647;
               213 676;
               233 654;
-              228 677;
-              175 512.5];
+              228 677];
 
-T = ones(6,1) * T';
+T = ones(5,1) * T';
 T = min(max(T, Tthreshold(:,1)), Tthreshold(:,2));
 
-roa=[1.4855            0          1.015             0.65838            0.44619        2.3267]';   % kmol/m3
-rob=[0.2763            0           0.25071           0.265              0.26591        0.27073]';
-roc=[482.25            0           676.4             654                677              512.5]';
-rod=[0.29365           0           0.23083           0.2857             0.24367        0.24713]';
+roa=[1.4855            0          1.015             0.65838            0.44619]';   % kmol/m3
+rob=[0.2763            0           0.25071           0.265              0.26591]';
+roc=[482.25            0           676.4             654                677]';
+rod=[0.29365           0           0.23083           0.2857             0.24367]';
 
 ro_water=[17.863 58.606 -95.396 213.89 -141.26]*1000; % mol/m3
 Tc_water=647.13; % kelvin

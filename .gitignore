@@ -4,3 +4,6 @@ Res_*.mat
 
 # local backups
 *_OLDbackup.*
+
+# MATLAB autosave
+*.asv
